@@ -1,0 +1,68 @@
+easylang = _{ SOI ~ stmt* ~ EOI }
+
+stmt        = _{ declaration | loop | if | return | expression }
+declaration =  { function | variable }
+function    =  { "func" ~ IDENTIFIER ~ PAREN_OPEN ~ parameters ~ PAREN_CLOSE ~ code_block }
+variable    =  { IDENTIFIER ~ ASSIGNMENT_OPERATORS ~ expression }
+parameters  =  { (IDENTIFIER ~ ("," ~ IDENTIFIER)*)? }
+code_block  =  { (BRACE_OPEN ~ stmt* ~ BRACE_CLOSE) | stmt }
+return      =  { "return" ~ stmt }
+loop        =  { "for" ~ IDENTIFIER ~ "in" ~ expression ~ "to" ~ expression ~ "then" ~ code_block }
+if          =  { "if" ~ expression ~ "then" ~ code_block }
+expression  =  { term ~ (BINARY_OPERATOR ~ term)* }
+term        = _{ UNARY_OPERATOR? ~ atom }
+atom        = _{ (call | LITERAL | VARIABLE | "(" ~ expression ~ ")") }
+call        =  { IDENTIFIER ~ PAREN_OPEN ~ arguments ~ PAREN_CLOSE }
+arguments   =  { expression? ~ ("," ~ expression)* }
+
+BINARY_OPERATOR = _{ RELATIONAL_OPERATOR | LOGICAL_OPERATOR | MATHEMATICAL_OPERATOR | ASSIGNMENT_OPERATOR }
+
+RELATIONAL_OPERATOR   = _{ EQUALS | NOT_EQUALS | GREATER_THAN_EQUALS | LESS_THAN_EQUALS | GREATER_THAN | LESS_THAN }
+EQUALS                = @{ "==" }
+NOT_EQUALS            = @{ "!=" }
+GREATER_THAN_EQUALS   = @{ ">=" }
+LESS_THAN_EQUALS      = @{ "<=" }
+GREATER_THAN          = @{ ">" }
+LESS_THAN             = @{ "<" }
+LOGICAL_OPERATOR      = _{ AND | OR }
+AND                   = @{ "and" }
+OR                    = @{ "or" }
+MATHEMATICAL_OPERATOR = _{ ADD | SUBTRACT | MULTIPLY | DIVIDE | MODULO }
+ADD                   = @{ "+" }
+SUBTRACT              = @{ "-" }
+MULTIPLY              = @{ "*" }
+DIVIDE                = @{ "/" }
+MODULO                = @{ "%" }
+UNARY_OPERATOR        = _{ NOT | NEGATE }
+NOT                   = @{ "!" }
+NEGATE                = @{ "-" }
+
+ASSIGNMENT_OPERATORS = _{ ASSIGNMENT_OPERATOR | ADD_ASSIGN_OPERATOR | SUB_ASSIGN_OPERATOR | MUL_ASSIGN_OPERATOR | DIV_ASSIGN_OPERATOR }
+ASSIGNMENT_OPERATOR  = @{ "=" }
+ADD_ASSIGN_OPERATOR  = @{ "+=" }
+SUB_ASSIGN_OPERATOR  = @{ "-=" }
+MUL_ASSIGN_OPERATOR  = @{ "*=" }
+DIV_ASSIGN_OPERATOR  = @{ "/=" }
+
+LITERAL = _{ BOOLEAN | STRING | REAL | INT | HEX | ARRAY | NULL }
+BOOLEAN = @{ "true" | "false" }
+STRING  = @{ ("\"" ~ (!"\"" ~ ANY)* ~ "\"") | ("'" ~ (!"\'" ~ ANY)* ~ "'") }
+REAL    = @{ INT ~ "." ~ INT? ~ ("E" ~ INT)? }
+INT     = @{ ASCII_DIGIT+ }
+HEX     = @{ "0x" ~ HEX_DIGIT+ }
+ARRAY   = @{ BRACK_OPEN ~ BRACK_CLOSE }
+NULL    = @{ "null" }
+
+IDENTIFIER = @{ (ASCII_ALPHANUMERIC | "_")+ }
+VARIABLE   = @{ IDENTIFIER | "["? ~ IDENTIFIER ~ "]"? }
+
+BRACE_OPEN  = _{ "{" }
+BRACE_CLOSE = _{ "}" }
+
+PAREN_OPEN  = _{ "(" }
+PAREN_CLOSE = _{ ")" }
+
+BRACK_OPEN  = _{ "[" }
+BRACK_CLOSE = _{ "]" }
+
+WHITESPACE = _{ " " | "\t" | NEWLINE }
