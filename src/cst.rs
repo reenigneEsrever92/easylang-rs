@@ -1,13 +1,15 @@
 use pest::{iterators::Pairs, Parser};
 
-use crate::error::EasylangResult;
+use crate::error::EvalXResult;
 
 #[derive(pest_derive::Parser)]
 #[grammar = "easylang.pest"]
 pub struct EasylangParser;
 
-pub fn parse_cst(input: &'_ str) -> EasylangResult<Pairs<'_, Rule>> {
-    Ok(EasylangParser::parse(Rule::evalx, input)?)
+type ParseResult<T> = Result<T, pest::error::Error<Rule>>;
+
+pub fn parse_cst(input: &'_ str) -> ParseResult<Pairs<'_, Rule>> {
+    EasylangParser::parse(Rule::evalx, input)
 }
 
 #[cfg(test)]

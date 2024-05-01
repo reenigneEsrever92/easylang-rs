@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::{ast::Expression, error::EazylangError, evalx};
+use crate::{ast::Expression, error::EvalXError, evalx};
 
 pub type EvalResult<T> = Result<T, EvalError>;
 
@@ -35,7 +35,7 @@ pub enum EvalError {
     #[error("")]
     Custom { msg: String },
     #[error("")]
-    EasylangError(#[from] Box<EazylangError>),
+    EasylangError(#[from] Box<EvalXError>),
 }
 
 pub fn eval(ctx: &EvalXContext, expression: &Expression) -> EvalResult<EvalXValue> {
