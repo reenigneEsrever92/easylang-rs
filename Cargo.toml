@@ -1,5 +1,5 @@
 [package]
-name = "easylang"
+name = "evalx"
 version = "0.0.1"
 edition = "2021"
 
@@ -10,6 +10,7 @@ pest = "2.7"
 pest_derive = "2.7"
 tracing = "0.1"
 thiserror = "1.0"
+lazy_static = "1.4"
 
 [dev-dependencies]
 tracing-subscriber = "0.3"

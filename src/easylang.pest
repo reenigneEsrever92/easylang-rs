@@ -1,14 +1,5 @@
-easylang = _{ SOI ~ stmt* ~ EOI }
+evalx = _{ SOI ~ expression* ~ EOI }
 
-stmt        = _{ declaration | loop | if | return | expression }
-declaration =  { function | variable }
-function    =  { "func" ~ IDENTIFIER ~ PAREN_OPEN ~ parameters ~ PAREN_CLOSE ~ code_block }
-variable    =  { IDENTIFIER ~ ASSIGNMENT_OPERATORS ~ expression }
-parameters  =  { (IDENTIFIER ~ ("," ~ IDENTIFIER)*)? }
-code_block  =  { (BRACE_OPEN ~ stmt* ~ BRACE_CLOSE) | stmt }
-return      =  { "return" ~ stmt }
-loop        =  { "for" ~ IDENTIFIER ~ "in" ~ expression ~ "to" ~ expression ~ "then" ~ code_block }
-if          =  { "if" ~ expression ~ "then" ~ code_block }
 expression  =  { term ~ (BINARY_OPERATOR ~ term)* }
 term        = _{ UNARY_OPERATOR? ~ atom }
 atom        = _{ (call | LITERAL | VARIABLE | "(" ~ expression ~ ")") }

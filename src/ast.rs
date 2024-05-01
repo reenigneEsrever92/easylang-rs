@@ -1,60 +1,10 @@
-use pest::{
-    iterators::{Pair, Pairs},
-    pratt_parser::{Assoc, Op, PrattParser},
-};
+use pest::{iterators::Pairs, pratt_parser::PrattParser};
 use tracing::debug;
 
 use crate::cst::Rule;
 
 #[derive(Debug, PartialEq)]
-pub enum Stmt {
-    Declaration(Declaration),
-    Loop(Loop),
-    If(If),
-    Return(Return),
-    Expression(Expression),
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Declaration {
-    Function(Function),
-    Variable(Variable),
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Function {
-    pub name: String,
-    pub args: Vec<String>,
-    pub body: CodeBlock,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct CodeBlock {
-    pub stmts: Vec<Stmt>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Variable {
-    pub name: String,
-    pub value: Expression,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Loop {
-    pub var_name: String,
-    pub range_start: Expression,
-    pub range_end: Expression,
-    pub body: CodeBlock,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct If {
-    pub expression: Expression,
-    pub body: CodeBlock,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Return {
+pub struct Evalx {
     pub expression: Expression,
 }
 
@@ -71,10 +21,6 @@ pub enum Expression {
     },
     Operand {
         operand: Operand,
-    },
-    FuncCall {
-        name: String,
-        arguments: Vec<Expression>,
     },
 }
 
@@ -119,50 +65,30 @@ pub enum Literal {
     Boolean { value: bool },
 }
 
-pub fn parse_ast(input: Pairs<Rule>) -> Vec<Stmt> {
-    let pratt = PrattParser::new()
-        .op(Op::prefix(Rule::NOT) | Op::prefix(Rule::NEGATE))
-        .op(Op::infix(Rule::EQUALS, Assoc::Left)
-            | Op::infix(Rule::NOT_EQUALS, Assoc::Left)
-            | Op::infix(Rule::GREATER_THAN, Assoc::Left)
-            | Op::infix(Rule::GREATER_THAN_EQUALS, Assoc::Left)
-            | Op::infix(Rule::LESS_THAN, Assoc::Left)
-            | Op::infix(Rule::LESS_THAN_EQUALS, Assoc::Left))
-        .op(Op::infix(Rule::ADD, Assoc::Left) | Op::infix(Rule::SUBTRACT, Assoc::Left))
-        .op(Op::infix(Rule::MULTIPLY, Assoc::Left)
-            | Op::infix(Rule::DIVIDE, Assoc::Left)
-            | Op::infix(Rule::MODULO, Assoc::Left))
-        .op(Op::infix(Rule::OR, Assoc::Left))
-        .op(Op::infix(Rule::AND, Assoc::Left));
+lazy_static::lazy_static! {
+    static ref PRATT_PARSER: PrattParser<Rule> = {
+        use pest::pratt_parser::{Assoc::*, Op};
+        use Rule::*;
 
-    input
-        .flat_map(|pair| {
-            if let Rule::EOI = pair.as_rule() {
-                None
-            } else {
-                Some(parse_stmt(pair, &pratt))
-            }
-        })
-        .collect()
+    PrattParser::new()
+        .op(Op::prefix(NOT) | Op::prefix(NEGATE))
+        .op(Op::infix(EQUALS, Left)
+            | Op::infix(NOT_EQUALS, Left)
+            | Op::infix(GREATER_THAN, Left)
+            | Op::infix(GREATER_THAN_EQUALS, Left)
+            | Op::infix(LESS_THAN, Left)
+            | Op::infix(LESS_THAN_EQUALS, Left))
+        .op(Op::infix(ADD, Left) | Op::infix(SUBTRACT, Left))
+        .op(Op::infix(MULTIPLY, Left)
+            | Op::infix(DIVIDE, Left)
+            | Op::infix(MODULO, Left))
+        .op(Op::infix(OR, Left))
+        .op(Op::infix(AND, Left))
+    };
 }
 
-fn parse_stmt(pair: Pair<Rule>, pratt: &PrattParser<Rule>) -> Stmt {
-    debug!(?pair, "Pair");
-    match pair.as_rule() {
-        Rule::declaration => parse_declaration(pair.into_inner(), pratt),
-        Rule::r#return => parse_return(pair.into_inner(), pratt),
-        Rule::r#loop => todo!(),
-        Rule::r#if => todo!(),
-        Rule::expression => Stmt::Expression(parse_expression(pair.into_inner(), pratt)),
-        rule => unreachable!("parse_stmt expected stmt, found {:?}", rule),
-    }
-}
-
-fn parse_return(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Stmt {
-    debug!(?pairs, "parse_return");
-    Stmt::Return(Return {
-        expression: parse_expression(pairs, pratt),
-    })
+pub fn parse_ast(mut input: Pairs<Rule>) -> Expression {
+    parse_expression(input.next().unwrap().into_inner(), &PRATT_PARSER)
 }
 
 fn parse_expression(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expression {
@@ -170,7 +96,6 @@ fn parse_expression(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expression
     pratt
         .map_primary(|primary| match primary.as_rule() {
             Rule::expression => parse_expression(primary.into_inner(), pratt),
-            Rule::call => parse_call(primary.into_inner(), pratt),
             Rule::REAL => Expression::Operand {
                 operand: Operand::Literal {
                     lit: Literal::Number {
@@ -248,106 +173,13 @@ fn parse_expression(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expression
         .parse(pairs)
 }
 
-fn parse_call(mut pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expression {
-    debug!(?pairs, "parse_call");
-    Expression::FuncCall {
-        name: pairs.next().unwrap().as_str().to_string(),
-        arguments: parse_arguments(pairs.next().unwrap(), pratt),
-    }
-}
-
-fn parse_arguments(pair: Pair<Rule>, pratt: &PrattParser<Rule>) -> Vec<Expression> {
-    debug!(?pair, "parse_arguments");
-    pair.into_inner()
-        .map(|pair| parse_expression(pair.into_inner(), pratt))
-        .collect()
-}
-
-fn parse_declaration(mut pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Stmt {
-    debug!(?pairs, "parse_declaration");
-    let pair = pairs.next().unwrap();
-    match pair.as_rule() {
-        Rule::function => parse_function(pair, pratt),
-        Rule::variable => todo!(),
-        rule => unreachable!("parse_declaration expected declaration, found {:?}", rule),
-    }
-}
-
-fn parse_function(pair: Pair<Rule>, pratt: &PrattParser<Rule>) -> Stmt {
-    debug!(?pair, "parse_function");
-    let mut inner = pair.into_inner();
-    Stmt::Declaration(Declaration::Function(Function {
-        name: inner.next().unwrap().as_str().to_string(),
-        args: parse_parameters(inner.next().unwrap()),
-        body: parse_code_block(inner.next().unwrap(), pratt),
-    }))
-}
-
-fn parse_code_block(pair: Pair<Rule>, pratt: &PrattParser<Rule>) -> CodeBlock {
-    debug!(?pair, "parse_code_block");
-    let inner = pair.into_inner();
-    CodeBlock {
-        stmts: inner.map(|pair| parse_stmt(pair, pratt)).collect(),
-    }
-}
-
-fn parse_parameters(pair: Pair<Rule>) -> Vec<String> {
-    debug!(?pair, "parse_parameters");
-    pair.into_inner()
-        .map(|pair| pair.as_str().to_string())
-        .collect()
-}
-
 #[cfg(test)]
 mod test {
-    use tracing::Level;
 
     use crate::{
-        ast::{
-            parse_ast, BinaryOp, CodeBlock, Declaration, Expression, Function, Literal, Operand,
-            Stmt,
-        },
+        ast::{parse_ast, BinaryOp, Expression, Literal, Operand},
         cst::parse_cst,
     };
-
-    #[test]
-    fn test_func() {
-        tracing_subscriber::fmt()
-            .with_max_level(Level::DEBUG)
-            .init();
-
-        let cst = parse_cst(
-            r#"
-                func give_five() { return 5 }
-                give_five()
-            "#,
-        )
-        .unwrap();
-        let ast = parse_ast(cst);
-
-        assert_eq!(
-            ast,
-            vec![
-                Stmt::Declaration(Declaration::Function(Function {
-                    name: "give_five".to_string(),
-                    args: Vec::new(),
-                    body: CodeBlock {
-                        stmts: vec![Stmt::Return(crate::ast::Return {
-                            expression: Expression::Operand {
-                                operand: Operand::Literal {
-                                    lit: Literal::Number { value: 5.0 }
-                                }
-                            }
-                        })]
-                    }
-                })),
-                Stmt::Expression(Expression::FuncCall {
-                    name: "give_five".to_string(),
-                    arguments: Vec::new()
-                })
-            ]
-        )
-    }
 
     #[test]
     fn test_parse_simple_arithmetic() {
@@ -355,8 +187,8 @@ mod test {
         let ast = parse_ast(cst);
 
         assert_eq!(
-            ast.get(0).unwrap(),
-            &Stmt::Expression(Expression::BinaryExpression {
+            ast,
+            Expression::BinaryExpression {
                 left: Box::new(Expression::BinaryExpression {
                     left: Box::new(Expression::Operand {
                         operand: Operand::Literal {
@@ -384,7 +216,7 @@ mod test {
                         }
                     })
                 })
-            })
+            }
         )
     }
 
@@ -394,8 +226,8 @@ mod test {
         let ast = parse_ast(cst);
 
         assert_eq!(
-            ast.get(0).unwrap(),
-            &Stmt::Expression(Expression::BinaryExpression {
+            ast,
+            Expression::BinaryExpression {
                 left: Box::new(Expression::Operand {
                     operand: Operand::Literal {
                         lit: Literal::Number { value: 7f64 }
@@ -415,7 +247,7 @@ mod test {
                         }
                     })
                 })
-            })
+            }
         )
     }
 
@@ -425,8 +257,8 @@ mod test {
         let ast = parse_ast(cst);
 
         assert_eq!(
-            ast.get(0).unwrap(),
-            &Stmt::Expression(Expression::BinaryExpression {
+            ast,
+            Expression::BinaryExpression {
                 left: Box::new(Expression::BinaryExpression {
                     left: Box::new(Expression::Operand {
                         operand: Operand::Literal {
@@ -454,7 +286,7 @@ mod test {
                         }
                     })
                 })
-            })
+            }
         )
     }
 
@@ -464,8 +296,8 @@ mod test {
         let ast = parse_ast(cst);
 
         assert_eq!(
-            ast.get(0).unwrap(),
-            &Stmt::Expression(Expression::BinaryExpression {
+            ast,
+            Expression::BinaryExpression {
                 left: Box::new(Expression::Operand {
                     operand: Operand::Literal {
                         lit: Literal::String {
@@ -481,7 +313,7 @@ mod test {
                         }
                     }
                 })
-            })
+            }
         )
     }
 
@@ -491,8 +323,8 @@ mod test {
         let ast = parse_ast(cst);
 
         assert_eq!(
-            ast.get(0).unwrap(),
-            &Stmt::Expression(Expression::BinaryExpression {
+            ast,
+            Expression::BinaryExpression {
                 left: Box::new(Expression::Operand {
                     operand: Operand::Variable {
                         name: "var".to_string()
@@ -506,7 +338,7 @@ mod test {
                         }
                     }
                 })
-            })
+            }
         )
     }
 }

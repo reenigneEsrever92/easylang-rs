@@ -1,156 +1,139 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::collections::HashMap;
+use thiserror::Error;
 
-use crate::{
-    ast::{Declaration, Expression, Stmt},
-    error::{EasylangResult, EazylangError},
-    eval_eazylang,
-};
+use crate::{ast::Expression, error::EazylangError, evalx};
+
+pub type EvalResult<T> = Result<T, EvalError>;
 
 #[derive(Debug, PartialEq)]
-pub enum EasylangValue {
+pub enum EvalXValue {
     None,
     Number(f64),
     Boolean(bool),
     String(String),
 }
 
-pub struct EvalContext {
-    stmts: RefCell<Vec<Stmt>>,
-    variables: RefCell<HashMap<String, String>>,
+#[derive(Default)]
+pub struct EvalXContext {
+    variables: HashMap<String, String>,
+    funcs: HashMap<String, EvalXFunc>,
 }
 
-impl EvalContext {
-    pub fn new(stmts: Vec<Stmt>, variables: HashMap<String, String>) -> Self {
-        Self {
-            stmts: RefCell::new(stmts),
-            variables: RefCell::new(variables),
-        }
+impl EvalXContext {
+    fn new(variables: HashMap<String, String>, funcs: HashMap<String, EvalXFunc>) -> Self {
+        Self { variables, funcs }
     }
+}
 
-    pub fn eval(&self) -> EasylangResult<EasylangValue> {
-        let result = self
-            .stmts
-            .borrow()
-            .iter()
-            .map(|stmt| self.eval_stmt(stmt))
-            .last()
-            .unwrap_or(Ok(EasylangValue::None));
+pub enum EvalXFunc {
+    Function(fn() -> EvalXValue),
+    Function1(fn(EvalXValue) -> EvalXValue),
+}
 
-        result
-    }
+#[derive(Debug, Error)]
+pub enum EvalError {
+    #[error("")]
+    Custom { msg: String },
+    #[error("")]
+    EasylangError(#[from] Box<EazylangError>),
+}
 
-    fn eval_stmt(&self, stmt: &Stmt) -> EasylangResult<EasylangValue> {
-        match stmt {
-            Stmt::Declaration(decl) => self.parse_declaration(&decl),
-            Stmt::Loop(_) => todo!(),
-            Stmt::If(_) => todo!(),
-            Stmt::Return(_) => todo!(),
-            Stmt::Expression(e) => self.eval_expression(&e),
-        }
-    }
+pub fn eval(ctx: &EvalXContext, expression: &Expression) -> EvalResult<EvalXValue> {
+    let result = eval_expression(ctx, expression);
 
-    fn parse_declaration(&self, decl: &Declaration) -> Result<EasylangValue, EazylangError> {
-        match decl {
-            Declaration::Function(_func) => Ok(EasylangValue::None),
-            Declaration::Variable(_var) => todo!(),
-        }
-    }
+    result
+}
 
-    fn eval_expression(&self, expression: &Expression) -> EasylangResult<EasylangValue> {
-        match expression {
-            Expression::BinaryExpression { left, op, right } => match op {
-                crate::ast::BinaryOp::Add => {
-                    let (left, right) = self.eval_numbers(left, right)?;
-                    Ok(EasylangValue::Number(left + right))
+fn eval_expression(ctx: &EvalXContext, expression: &Expression) -> EvalResult<EvalXValue> {
+    match expression {
+        Expression::BinaryExpression { left, op, right } => match op {
+            crate::ast::BinaryOp::Add => {
+                let (left, right) = eval_numbers(ctx, left, right)?;
+                Ok(EvalXValue::Number(left + right))
+            }
+            crate::ast::BinaryOp::Subtract => {
+                let (left, right) = eval_numbers(ctx, left, right)?;
+                Ok(EvalXValue::Number(left - right))
+            }
+            crate::ast::BinaryOp::Multiply => {
+                let (left, right) = eval_numbers(ctx, left, right)?;
+                Ok(EvalXValue::Number(left * right))
+            }
+            crate::ast::BinaryOp::Divide => {
+                let (left, right) = eval_numbers(ctx, left, right)?;
+                Ok(EvalXValue::Number(left / right))
+            }
+            crate::ast::BinaryOp::Modulo => {
+                let (left, right) = eval_numbers(ctx, left, right)?;
+                Ok(EvalXValue::Number(left % right))
+            }
+            crate::ast::BinaryOp::Equals => {
+                let (left, right) = eval_values(ctx, left, right)?;
+                Ok(EvalXValue::Boolean(left == right))
+            }
+            crate::ast::BinaryOp::LessThan => todo!(),
+            crate::ast::BinaryOp::GreaterThan => todo!(),
+            crate::ast::BinaryOp::LessThanEquals => todo!(),
+            crate::ast::BinaryOp::GreaterThanEquals => todo!(),
+            crate::ast::BinaryOp::NotEquals => todo!(),
+            crate::ast::BinaryOp::Or => todo!(),
+            crate::ast::BinaryOp::And => todo!(),
+        },
+        Expression::UnaryExpression { op, expression } => match op {
+            crate::ast::UnaryOp::Not => todo!(),
+            crate::ast::UnaryOp::Negate => {
+                let value = eval_expression(ctx, expression)?;
+                match value {
+                    EvalXValue::Number(value) => Ok(EvalXValue::Number(value * -1f64)),
+                    _ => Err(EvalError::Custom {
+                        msg: "! operator can only be used on numbers.".to_string(),
+                    }),
                 }
-                crate::ast::BinaryOp::Subtract => {
-                    let (left, right) = self.eval_numbers(left, right)?;
-                    Ok(EasylangValue::Number(left - right))
+            }
+        },
+        Expression::Operand { operand } => match operand {
+            crate::ast::Operand::Variable { name } => {
+                match ctx.variables.get(name) {
+                    // evaluate variables as if they were evalx, too.
+                    Some(var) => Ok(evalx(ctx, var).map_err(Box::new)?),
+                    None => Err(EvalError::Custom {
+                        msg: format!("Expected a variable with name: {name}"),
+                    }),
                 }
-                crate::ast::BinaryOp::Multiply => {
-                    let (left, right) = self.eval_numbers(left, right)?;
-                    Ok(EasylangValue::Number(left * right))
-                }
-                crate::ast::BinaryOp::Divide => {
-                    let (left, right) = self.eval_numbers(left, right)?;
-                    Ok(EasylangValue::Number(left / right))
-                }
-                crate::ast::BinaryOp::Modulo => {
-                    let (left, right) = self.eval_numbers(left, right)?;
-                    Ok(EasylangValue::Number(left % right))
-                }
-                crate::ast::BinaryOp::Equals => {
-                    let (left, right) = self.eval_values(left, right)?;
-                    Ok(EasylangValue::Boolean(left == right))
-                }
-                crate::ast::BinaryOp::LessThan => todo!(),
-                crate::ast::BinaryOp::GreaterThan => todo!(),
-                crate::ast::BinaryOp::LessThanEquals => todo!(),
-                crate::ast::BinaryOp::GreaterThanEquals => todo!(),
-                crate::ast::BinaryOp::NotEquals => todo!(),
-                crate::ast::BinaryOp::Or => todo!(),
-                crate::ast::BinaryOp::And => todo!(),
+            }
+            crate::ast::Operand::Literal { lit } => match lit {
+                crate::ast::Literal::Number { value } => Ok(EvalXValue::Number(*value)),
+                crate::ast::Literal::String { value } => Ok(EvalXValue::String(value.to_string())),
+                crate::ast::Literal::Boolean { value } => Ok(EvalXValue::Boolean(*value)),
             },
-            Expression::UnaryExpression { op, expression } => match op {
-                crate::ast::UnaryOp::Not => todo!(),
-                crate::ast::UnaryOp::Negate => {
-                    let value = self.eval_expression(expression)?;
-                    match value {
-                        EasylangValue::Number(value) => Ok(EasylangValue::Number(value * -1f64)),
-                        _ => Err(EazylangError::EvaluationError {
-                            msg: "! operator can only be used on numbers.".to_string(),
-                        }),
-                    }
-                }
-            },
-            Expression::Operand { operand } => match operand {
-                crate::ast::Operand::Variable { name } => {
-                    match self.variables.borrow().get(name) {
-                        // evaluate variables as if they where eazylang, too.
-                        Some(var) => eval_eazylang(var, HashMap::new()),
-                        None => {
-                            return Err(EazylangError::EvaluationError {
-                                msg: format!("Expected a variable with name: {name}"),
-                            })
-                        }
-                    }
-                }
-                crate::ast::Operand::Literal { lit } => match lit {
-                    crate::ast::Literal::Number { value } => Ok(EasylangValue::Number(*value)),
-                    crate::ast::Literal::String { value } => {
-                        Ok(EasylangValue::String(value.to_string()))
-                    }
-                    crate::ast::Literal::Boolean { value } => Ok(EasylangValue::Boolean(*value)),
-                },
-            },
-            Expression::FuncCall {
-                name: _,
-                arguments: _,
-            } => todo!(),
-        }
+        },
     }
+}
 
-    fn eval_values<'a>(
-        &self,
-        left: &Expression,
-        right: &Expression,
-    ) -> EasylangResult<(EasylangValue, EasylangValue)> {
-        let (left_value, right_value) = (self.eval_expression(left)?, self.eval_expression(right)?);
-        match (&left_value , &right_value) {
-        (EasylangValue::Number(_), EasylangValue::Number(_)) => Ok((left_value, right_value)),
-        (EasylangValue::Boolean(_), EasylangValue::Boolean(_)) => Ok((left_value, right_value)),
-        (EasylangValue::String(_), EasylangValue::String(_)) => Ok((left_value, right_value)),
-        (_left, _right) => Err(EazylangError::EvaluationError { msg: format!("Expected left and right to be the same type. But they are: left: {left_value:?}, right: {right_value:?}") }),
+fn eval_values<'a>(
+    ctx: &EvalXContext,
+    left: &Expression,
+    right: &Expression,
+) -> EvalResult<(EvalXValue, EvalXValue)> {
+    let (left_value, right_value) = (eval_expression(ctx, left)?, eval_expression(ctx, right)?);
+    match (&left_value , &right_value) {
+        (EvalXValue::Number(_), EvalXValue::Number(_)) => Ok((left_value, right_value)),
+        (EvalXValue::Boolean(_), EvalXValue::Boolean(_)) => Ok((left_value, right_value)),
+        (EvalXValue::String(_), EvalXValue::String(_)) => Ok((left_value, right_value)),
+        (_left, _right) => Err(EvalError::Custom { msg: format!("Expected left and right to be the same type. But they are: left: {left_value:?}, right: {right_value:?}") }),
     }
-    }
+}
 
-    fn eval_numbers(&self, left: &Expression, right: &Expression) -> EasylangResult<(f64, f64)> {
-        match (self.eval_expression(left)?, self.eval_expression(right)?) {
-            (EasylangValue::Number(value1), EasylangValue::Number(value2)) => Ok((value1, value2)),
-            _ => Err(EazylangError::EvaluationError {
-                msg: "Expected left and right expression to evaluate to a number.".to_string(),
-            }),
-        }
+fn eval_numbers(
+    ctx: &EvalXContext,
+    left: &Expression,
+    right: &Expression,
+) -> EvalResult<(f64, f64)> {
+    match (eval_expression(ctx, left)?, eval_expression(ctx, right)?) {
+        (EvalXValue::Number(value1), EvalXValue::Number(value2)) => Ok((value1, value2)),
+        _ => Err(EvalError::Custom {
+            msg: "Expected left and right expression to evaluate to a number.".to_string(),
+        }),
     }
 }
 
@@ -162,7 +145,7 @@ mod test {
     use crate::{
         ast::parse_ast,
         cst::EasylangParser,
-        eval::{EasylangValue, EvalContext},
+        eval::{eval, EvalXContext, EvalXValue},
     };
 
     macro_rules! eval_math {
@@ -170,11 +153,12 @@ mod test {
         $(
             #[test]
             fn $name() {
-                let cst = EasylangParser::parse(crate::cst::Rule::easylang, $expr).unwrap();
+                let cst = EasylangParser::parse(crate::cst::Rule::evalx, $expr).unwrap();
                 let ast = parse_ast(cst);
-                let eval = EvalContext::new(ast, HashMap::new()).eval().unwrap();
+                let ctx = EvalXContext::default();
+                let eval = eval(&ctx, &ast);
 
-                assert_eq!(eval, EasylangValue::Number($result));
+                assert_eq!(eval.unwrap(), EvalXValue::Number($result));
             }
         )*
         }
@@ -185,11 +169,12 @@ mod test {
         $(
             #[test]
             fn $name() {
-                let cst = EasylangParser::parse(crate::cst::Rule::easylang, $expr).unwrap();
+                let cst = EasylangParser::parse(crate::cst::Rule::evalx, $expr).unwrap();
                 let ast = parse_ast(cst);
-                let eval = EvalContext::new(ast, HashMap::new()).eval().unwrap();
+                let ctx = EvalXContext::default();
+                let eval = eval(&ctx, &ast);
 
-                assert_eq!(eval, EasylangValue::Boolean($result));
+                assert_eq!(eval.unwrap(), EvalXValue::Boolean($result));
             }
         )*
         }
@@ -209,27 +194,16 @@ mod test {
     eval_boolean!(test_string_comparison_1, "\'test\' == \"test\"", true);
     eval_boolean!(test_string_comparison_2, "\"test\" == \"test2\"", false);
 
-    // TODO
-    // eval_math!(
-    //     test_function_call,
-    //     r#"
-    //         func give_five() { return 5 }
-    //         give_five()
-    //     "#,
-    //     5.0
-    // );
-
     #[test]
     fn test_variable() {
-        let cst = EasylangParser::parse(crate::cst::Rule::easylang, "\"test\" == [var]").unwrap();
+        let cst = EasylangParser::parse(crate::cst::Rule::evalx, "\"test\" == [var]").unwrap();
         let ast = parse_ast(cst);
-        let eval = EvalContext::new(
-            ast,
-            HashMap::from([("var".to_string(), "\"test\"".to_string())]),
-        )
-        .eval()
-        .unwrap();
+        let ctx = EvalXContext {
+            variables: HashMap::from([("var".to_string(), "\"test\"".to_string())]),
+            ..Default::default()
+        };
+        let eval = eval(&ctx, &ast);
 
-        assert_eq!(eval, EasylangValue::Boolean(true));
+        assert_eq!(eval.unwrap(), EvalXValue::Boolean(true));
     }
 }

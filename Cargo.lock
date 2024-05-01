@@ -147,10 +147,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "easylang"
+name = "evalx"
 version = "0.0.1"
 dependencies = [
  "clap",
+ "lazy_static",
  "pest",
  "pest_derive",
  "thiserror",

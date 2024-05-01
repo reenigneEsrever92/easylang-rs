@@ -6,8 +6,8 @@ use crate::error::EasylangResult;
 #[grammar = "easylang.pest"]
 pub struct EasylangParser;
 
-pub fn parse_cst(input: &'_ str) -> EasylangResult<Pairs<'_, crate::cst::Rule>> {
-    Ok(EasylangParser::parse(Rule::easylang, input)?)
+pub fn parse_cst(input: &'_ str) -> EasylangResult<Pairs<'_, Rule>> {
+    Ok(EasylangParser::parse(Rule::evalx, input)?)
 }
 
 #[cfg(test)]
@@ -37,9 +37,4 @@ mod test {
     test_expression!(test_string, "\"test\"", Rule::STRING);
     test_expression!(test_string_1, "'test'", Rule::STRING);
     test_expression!(test_expression, "4 * -(5 + 5)", Rule::expression);
-    test_expression!(
-        test_function_declaration,
-        "func give_five() { retrun 5 }",
-        Rule::function
-    );
 }
