@@ -6,10 +6,10 @@ use crate::error::EvalXResult;
 #[grammar = "easylang.pest"]
 pub struct EasylangParser;
 
-type ParseResult<T> = Result<T, pest::error::Error<Rule>>;
+type ParseResult<T> = Result<T, Box<pest::error::Error<Rule>>>;
 
 pub fn parse_cst(input: &'_ str) -> ParseResult<Pairs<'_, Rule>> {
-    EasylangParser::parse(Rule::evalx, input)
+    EasylangParser::parse(Rule::evalx, input).map_err(Box::new)
 }
 
 #[cfg(test)]
