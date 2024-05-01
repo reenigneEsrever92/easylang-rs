@@ -39,9 +39,9 @@ pub enum EvalError {
 }
 
 pub fn eval(ctx: &EvalXContext, expression: &Expression) -> EvalResult<EvalXValue> {
-    let result = eval_expression(ctx, expression);
+    
 
-    result
+    eval_expression(ctx, expression)
 }
 
 fn eval_expression(ctx: &EvalXContext, expression: &Expression) -> EvalResult<EvalXValue> {

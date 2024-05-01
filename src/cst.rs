@@ -1,6 +1,6 @@
 use pest::{iterators::Pairs, Parser};
 
-use crate::error::EvalXResult;
+
 
 #[derive(pest_derive::Parser)]
 #[grammar = "easylang.pest"]
